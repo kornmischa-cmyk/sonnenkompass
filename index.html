@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Sonnenkompass</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sky:#0B1220;
+    --haze:#16233B;
+    --line:#2A3B58;
+    --text:#EAF0FA;
+    --muted:#93A3BE;
+    --rise:#FFB25E;
+    --set:#F0603C;
+    --sun:#FFE29A;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:
+      radial-gradient(120% 60% at 50% 110%, #223252 0%, transparent 60%),
+      var(--sky);
+    color:var(--text);
+    font-family:"Archivo",system-ui,sans-serif;
+    display:flex;flex-direction:column;align-items:center;
+    padding:20px 16px 32px;
+    min-height:100%;
+  }
+  header{width:100%;max-width:420px;margin-bottom:6px}
+  h1{
+    font-family:"Fraunces",serif;font-weight:300;font-size:1.9rem;letter-spacing:.01em;
+  }
+  #locLine{color:var(--muted);font-size:.85rem;margin-top:4px;min-height:1.2em}
+  #locLine b{color:var(--text);font-weight:500}
+
+  .stage{position:relative;width:min(86vw,360px);aspect-ratio:1;margin:18px 0 8px}
+  .pointer{
+    position:absolute;top:-4px;left:50%;transform:translateX(-50%);
+    width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;
+    border-top:14px solid var(--sun);filter:drop-shadow(0 0 6px rgba(255,226,154,.5));
+    z-index:3;
+  }
+  svg{width:100%;height:100%;display:block}
+  #rose{transform-origin:50% 50%;transition:transform .25s ease-out}
+  @media (prefers-reduced-motion: reduce){ #rose{transition:none} }
+
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;max-width:420px;margin-top:10px}
+  .card{
+    background:var(--haze);border:1px solid var(--line);border-radius:14px;padding:12px 14px;
+  }
+  .card .label{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .card .time{font-family:"Fraunces",serif;font-weight:500;font-size:1.7rem;margin:2px 0}
+  .card .az{font-size:.85rem;color:var(--muted)}
+  .card.rise .time{color:var(--rise)}
+  .card.set .time{color:var(--set)}
+
+  .now{width:100%;max-width:420px;margin-top:10px;font-size:.85rem;color:var(--muted);
+    display:flex;justify-content:space-between;gap:8px;padding:0 4px}
+  .now b{color:var(--text);font-weight:500}
+
+  .controls{width:100%;max-width:420px;margin-top:14px;display:flex;flex-direction:column;gap:10px}
+  button{
+    font-family:inherit;font-size:.95rem;font-weight:600;color:var(--sky);
+    background:var(--sun);border:none;border-radius:12px;padding:12px;cursor:pointer;
+  }
+  button.secondary{background:transparent;color:var(--text);border:1px solid var(--line)}
+  button:focus-visible{outline:3px solid var(--rise);outline-offset:2px}
+  .manual{display:none;gap:8px;flex-wrap:wrap}
+  .manual.show{display:flex}
+  .manual input{
+    flex:1;min-width:110px;background:var(--haze);border:1px solid var(--line);border-radius:10px;
+    color:var(--text);font-family:inherit;font-size:.95rem;padding:10px 12px;
+  }
+  .manual input:focus-visible{outline:3px solid var(--rise);outline-offset:1px}
+  .hint{font-size:.78rem;color:var(--muted);line-height:1.45}
+  .status{
+    display:none;font-size:.85rem;line-height:1.45;border-radius:10px;
+    padding:10px 12px;border:1px solid var(--line);
+  }
+  .status.ok{display:block;color:#8FE3A8;border-color:#2E5A3C;background:rgba(46,90,60,.18)}
+  .status.err{display:block;color:#FFA08C;border-color:#6B3226;background:rgba(107,50,38,.18)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Sonnenkompass</h1>
+  <div id="locLine">Standort wird ermittelt …</div>
+</header>
+
+<div class="stage">
+  <div class="pointer" aria-hidden="true"></div>
+  <svg viewBox="0 0 200 200" role="img" aria-label="Kompassrose mit Sonnenauf- und -untergangsrichtung">
+    <defs>
+      <linearGradient id="dayArc" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#FFB25E"/>
+        <stop offset=".5" stop-color="#FFE29A"/>
+        <stop offset="1" stop-color="#F0603C"/>
+      </linearGradient>
+    </defs>
+    <g id="rose">
+      <circle cx="100" cy="100" r="92" fill="#111C31" stroke="#2A3B58" stroke-width="1"/>
+      <g id="ticks"></g>
+      <g id="labels"></g>
+      <path id="arc" fill="none" stroke="url(#dayArc)" stroke-width="4" stroke-linecap="round" opacity=".9"/>
+      <g id="riseMark"></g>
+      <g id="setMark"></g>
+      <circle id="sunNow" r="6" fill="var(--sun)" opacity="0"/>
+      <circle cx="100" cy="100" r="3" fill="#5B6E90"/>
+    </g>
+  </svg>
+</div>
+
+<div class="cards">
+  <div class="card rise">
+    <div class="label">Aufgang</div>
+    <div class="time" id="riseTime">–:–</div>
+    <div class="az" id="riseAz">–</div>
+  </div>
+  <div class="card set">
+    <div class="label">Untergang</div>
+    <div class="time" id="setTime">–:–</div>
+    <div class="az" id="setAz">–</div>
+  </div>
+</div>
+
+<div class="now">
+  <span>Sonne jetzt: <b id="sunNowTxt">–</b></span>
+  <span>Blickrichtung: <b id="headTxt">Norden oben</b></span>
+</div>
+
+<div class="controls">
+  <button id="locateBtn" class="secondary">📍 Position aktualisieren</button>
+  <div id="locStatus" class="status" role="status" aria-live="polite"></div>
+  <button id="compassBtn" hidden>Kompass aktivieren</button>
+  <button id="manualBtn" class="secondary">Standort manuell eingeben</button>
+  <div class="manual" id="manualPanel">
+    <input id="latIn" type="number" step="0.0001" inputmode="decimal" placeholder="Breite, z. B. 50.11" aria-label="Breitengrad">
+    <input id="lonIn" type="number" step="0.0001" inputmode="decimal" placeholder="Länge, z. B. 8.68" aria-label="Längengrad">
+    <button id="applyBtn" style="flex:100%">Übernehmen</button>
+  </div>
+  <p class="hint" id="hint">Die Rose dreht sich mit deinem Handy-Kompass, sobald du ihn aktivierst. Ohne Kompass gilt: Norden ist oben.</p>
+</div>
+
+<script>
+/* ---------- Sonnenberechnung (Standard-Astronomieformeln, suncalc-Ansatz) ---------- */
+const rad = Math.PI/180, e = rad*23.4397, J0 = 0.0009;
+const toJulian = d => d.valueOf()/86400000 - 0.5 + 2440588;
+const fromJulian = j => new Date((j + 0.5 - 2440588) * 86400000);
+const toDays = d => toJulian(d) - 2451545;
+const meanAnomaly = d => rad*(357.5291 + 0.98560028*d);
+function eclLon(M){
+  const C = rad*(1.9148*Math.sin(M) + 0.02*Math.sin(2*M) + 0.0003*Math.sin(3*M));
+  return M + C + rad*102.9372 + Math.PI;
+}
+const decl = L => Math.asin(Math.sin(L)*Math.sin(e));
+const ra = L => Math.atan2(Math.sin(L)*Math.cos(e), Math.cos(L));
+const sidereal = (d,lw) => rad*(280.16 + 360.9856235*d) - lw;
+
+function sunPosition(date, lat, lon){
+  const lw = -lon*rad, phi = lat*rad, d = toDays(date);
+  const M = meanAnomaly(d), L = eclLon(M), dec = decl(L), H = sidereal(d,lw) - ra(L);
+  const azFromSouth = Math.atan2(Math.sin(H), Math.cos(H)*Math.sin(phi) - Math.tan(dec)*Math.cos(phi));
+  const alt = Math.asin(Math.sin(phi)*Math.sin(dec) + Math.cos(phi)*Math.cos(dec)*Math.cos(H));
+  return { az: ((azFromSouth/rad) + 180 + 360) % 360, alt: alt/rad };
+}
+
+function sunTimes(date, lat, lon){
+  const lw = -lon*rad, phi = lat*rad;
+  const d = toDays(date);
+  const n = Math.round(d - J0 - lw/(2*Math.PI));
+  const ds = J0 + lw/(2*Math.PI) + n;
+  const M = meanAnomaly(ds), L = eclLon(M), dec = decl(L);
+  const Jnoon = 2451545 + ds + 0.0053*Math.sin(M) - 0.0069*Math.sin(2*L);
+  const h0 = -0.833*rad;
+  const cosH = (Math.sin(h0) - Math.sin(phi)*Math.sin(dec)) / (Math.cos(phi)*Math.cos(dec));
+  if (cosH > 1 || cosH < -1) return null;           // Polarnacht / Mitternachtssonne
+  const w = Math.acos(cosH);
+  const Jset = 2451545 + (J0 + (w + lw)/(2*Math.PI) + n) + 0.0053*Math.sin(M) - 0.0069*Math.sin(2*L);
+  const Jrise = Jnoon - (Jset - Jnoon);
+  return { rise: fromJulian(Jrise), set: fromJulian(Jset) };
+}
+
+/* ---------- Hilfen ---------- */
+const $ = id => document.getElementById(id);
+const fmtTime = d => d.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"});
+const DIRS = ["N","NNO","NO","ONO","O","OSO","SO","SSO","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+const dirName = a => DIRS[Math.round(a/22.5) % 16];
+const pt = (az, r) => ({ x: 100 + r*Math.sin(az*rad), y: 100 - r*Math.cos(az*rad) });
+
+/* ---------- Rose zeichnen ---------- */
+(function drawRose(){
+  const ticks = $("ticks"), labels = $("labels");
+  let t = "", l = "";
+  for (let a = 0; a < 360; a += 15){
+    const major = a % 90 === 0;
+    const p1 = pt(a, 92), p2 = pt(a, major ? 82 : 87);
+    t += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="${major ? "#93A3BE" : "#3A4E70"}" stroke-width="${major?2:1}"/>`;
+  }
+  [["N",0],["O",90],["S",180],["W",270]].forEach(([n,a])=>{
+    const p = pt(a, 72);
+    l += `<text x="${p.x}" y="${p.y}" fill="${n==="N" ? "#EAF0FA" : "#93A3BE"}" font-size="12" font-weight="600" text-anchor="middle" dominant-baseline="middle" font-family="Archivo,sans-serif">${n}</text>`;
+  });
+  ticks.innerHTML = t; labels.innerHTML = l;
+})();
+
+function marker(g, az, kind){
+  const color = kind === "rise" ? "var(--rise)" : "var(--set)";
+  const p = pt(az, 82), q = pt(az, 55), guideEnd = pt(az, 71);
+  const base =
+    `<line x1="-8.5" y1="1" x2="8.5" y2="1" stroke="${color}" stroke-width="1.4" stroke-linecap="round" opacity=".55"/>` +
+    `<path d="M -4.6 1 A 4.6 4.6 0 0 1 4.6 1 Z" fill="${color}"/>`;
+  const rays =
+    `<g stroke="${color}" stroke-width="1.6" stroke-linecap="round">` +
+      `<line x1="0" y1="-6" x2="0" y2="-8.5"/>` +
+      `<line x1="-4.95" y1="-3.95" x2="-6.7" y2="-5.7"/>` +
+      `<line x1="4.95" y1="-3.95" x2="6.7" y2="-5.7"/>` +
+    `</g>`;
+  const sink =
+    `<path d="M -3 4.2 L 0 7.2 L 3 4.2" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`;
+  g.innerHTML =
+    `<line x1="${q.x}" y1="${q.y}" x2="${guideEnd.x}" y2="${guideEnd.y}" stroke="${color}" stroke-width="2" stroke-dasharray="3 3" opacity=".7"/>` +
+    `<g transform="translate(${p.x} ${p.y}) rotate(${az})">${base}${kind === "rise" ? rays : sink}</g>`;
+}
+
+function arcPath(a1, a2){
+  const r = 92, p1 = pt(a1, r), p2 = pt(a2, r);
+  const span = (a2 - a1 + 360) % 360;
+  return `M ${p1.x} ${p1.y} A ${r} ${r} 0 ${span > 180 ? 1 : 0} 1 ${p2.x} ${p2.y}`;
+}
+
+/* ---------- Zustand & Rendern ---------- */
+let state = { lat: null, lon: null, label: "", heading: 0 };
+
+function render(){
+  if (state.lat === null) return;
+  const now = new Date();
+  const times = sunTimes(now, state.lat, state.lon);
+  if (!times){
+    $("riseTime").textContent = "—"; $("setTime").textContent = "—";
+    $("riseAz").textContent = "Polartag/-nacht"; $("setAz").textContent = "";
+    return;
+  }
+  const riseAz = sunPosition(times.rise, state.lat, state.lon).az;
+  const setAz  = sunPosition(times.set,  state.lat, state.lon).az;
+  const nowPos = sunPosition(now, state.lat, state.lon);
+
+  $("riseTime").textContent = fmtTime(times.rise);
+  $("setTime").textContent  = fmtTime(times.set);
+  $("riseAz").textContent = `${Math.round(riseAz)}° ${dirName(riseAz)}`;
+  $("setAz").textContent  = `${Math.round(setAz)}° ${dirName(setAz)}`;
+
+  $("arc").setAttribute("d", arcPath(riseAz, setAz));
+  marker($("riseMark"), riseAz, "rise");
+  marker($("setMark"),  setAz,  "set");
+
+  const s = $("sunNow");
+  if (nowPos.alt > 0){
+    const p = pt(nowPos.az, 92);
+    s.setAttribute("cx", p.x); s.setAttribute("cy", p.y); s.setAttribute("opacity", "1");
+    $("sunNowTxt").textContent = `${Math.round(nowPos.az)}° ${dirName(nowPos.az)} · ${Math.round(nowPos.alt)}° hoch`;
+  } else {
+    s.setAttribute("opacity", "0");
+    $("sunNowTxt").textContent = "unter dem Horizont";
+  }
+}
+
+function setLocation(lat, lon, label){
+  state.lat = lat; state.lon = lon;
+  $("locLine").innerHTML = `<b>${label}</b> · ${lat.toFixed(3)}°, ${lon.toFixed(3)}°`;
+  render();
+}
+
+/* ---------- GPS ---------- */
+function showStatus(kind, msg){
+  const s = $("locStatus");
+  s.className = "status " + kind;
+  s.textContent = msg;
+}
+
+function locate(fresh){
+  if (!navigator.geolocation){
+    showStatus("err", "✗ Dein Browser stellt keine Ortung bereit.");
+    manualFallback("Keine Ortung verfügbar.");
+    return;
+  }
+  const btn = $("locateBtn");
+  btn.disabled = true; btn.textContent = "📍 Position wird ermittelt …";
+  $("locLine").textContent = "Standort wird ermittelt …";
+  const done = () => { btn.disabled = false; btn.textContent = "📍 Position aktualisieren"; };
+
+  const onSuccess = (p, note) => {
+    setLocation(p.coords.latitude, p.coords.longitude, "Dein Standort");
+    $("manualPanel").classList.remove("show");
+    const acc = p.coords.accuracy;
+    const t = new Date(p.timestamp).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"});
+    showStatus("ok", `✓ Position aktualisiert um ${t} Uhr` +
+      (isFinite(acc) ? ` · Genauigkeit ca. ±${Math.round(acc)} m` : "") +
+      (note ? ` · ${note}` : ""));
+    done();
+  };
+  const onFail = err => {
+    const reasons = {
+      1: "Zugriff verweigert – bitte Ortung für diese Seite im Browser erlauben.",
+      2: "Position derzeit nicht bestimmbar (kein GPS-/Netzsignal).",
+      3: "Zeitüberschreitung – weder GPS noch Netzwerk-Ortung haben geantwortet."
+    };
+    showStatus("err", "✗ Ortung fehlgeschlagen: " + (reasons[err.code] || "Unbekannter Fehler."));
+    manualFallback("Ortung nicht erfolgreich.");
+    done();
+  };
+
+  // Stufe 1: präzise per GPS (bis 20 s). Stufe 2 bei Timeout: schnelle Netzwerk-Ortung.
+  navigator.geolocation.getCurrentPosition(
+    p => onSuccess(p),
+    err => {
+      if (err.code === 3 && fresh){
+        btn.textContent = "📍 GPS zäh – versuche Netzwerk-Ortung …";
+        navigator.geolocation.getCurrentPosition(
+          p => onSuccess(p, "netzwerkbasiert, ggf. ungenauer"),
+          onFail,
+          { enableHighAccuracy: false, timeout: 10000, maximumAge: 120000 }
+        );
+      } else onFail(err);
+    },
+    { enableHighAccuracy: !!fresh, timeout: fresh ? 20000 : 8000, maximumAge: fresh ? 0 : 300000 }
+  );
+}
+function manualFallback(msg){
+  $("locLine").textContent = msg + " Bitte Koordinaten eingeben.";
+  $("manualPanel").classList.add("show");
+  $("latIn").value = "50.1109"; $("lonIn").value = "8.6821"; // Frankfurt als Startwert
+}
+
+/* ---------- Kompass ---------- */
+function onOrient(ev){
+  let h = null;
+  if (typeof ev.webkitCompassHeading === "number") h = ev.webkitCompassHeading;       // iOS
+  else if (ev.absolute && typeof ev.alpha === "number") h = (360 - ev.alpha) % 360;   // Android
+  if (h === null) return;
+  state.heading = h;
+  $("rose").style.transform = `rotate(${-h}deg)`;
+  $("headTxt").textContent = `${Math.round(h)}° ${dirName(h)}`;
+}
+function startCompass(){
+  if (typeof DeviceOrientationEvent !== "undefined" &&
+      typeof DeviceOrientationEvent.requestPermission === "function"){
+    DeviceOrientationEvent.requestPermission().then(res => {
+      if (res === "granted"){
+        window.addEventListener("deviceorientation", onOrient);
+        $("compassBtn").hidden = true;
+      } else $("hint").textContent = "Kompass-Zugriff abgelehnt – Norden bleibt oben.";
+    }).catch(()=>{ $("hint").textContent = "Kompass nicht verfügbar – Norden bleibt oben."; });
+  } else {
+    window.addEventListener("deviceorientationabsolute", onOrient);
+    window.addEventListener("deviceorientation", onOrient);
+    $("compassBtn").hidden = true;
+  }
+}
+
+/* ---------- Events ---------- */
+if (typeof DeviceOrientationEvent !== "undefined" &&
+    typeof DeviceOrientationEvent.requestPermission === "function"){
+  $("compassBtn").hidden = false;               // iOS braucht eine Nutzergeste
+} else if (window.DeviceOrientationEvent){
+  startCompass();                                // Android: direkt versuchen
+}
+$("compassBtn").addEventListener("click", startCompass);
+$("locateBtn").addEventListener("click", () => locate(true));
+$("manualBtn").addEventListener("click", () => {
+  $("manualPanel").classList.toggle("show");
+  if ($("latIn").value === "") { $("latIn").value = "50.1109"; $("lonIn").value = "8.6821"; }
+});
+$("applyBtn").addEventListener("click", () => {
+  const lat = parseFloat($("latIn").value), lon = parseFloat($("lonIn").value);
+  if (isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180)
+    setLocation(lat, lon, "Manuell");
+  else $("locLine").textContent = "Ungültige Koordinaten – bitte prüfen.";
+});
+
+locate();
+setInterval(render, 60000);   // Sonnenstand jede Minute aktualisieren
+</script>
+</body>
+</html>
