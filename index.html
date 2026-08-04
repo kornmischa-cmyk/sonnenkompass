@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Sonnenkompass</title>
+<link rel="manifest" href="./manifest.json">
 <style>
   @font-face{
     font-family:"Fraunces";
@@ -567,6 +568,8 @@ $("applyBtn").addEventListener("click", () => {
 
 locate();
 setInterval(render, 60000);   // Sonnenstand jede Minute aktualisieren
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
 </script>
 </body>
 </html>
