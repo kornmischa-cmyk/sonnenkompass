@@ -536,14 +536,30 @@ function manualFallback(msg){
 }
 
 /* ---------- Kompass ---------- */
+// Rohe Sensordaten rauschen und springen am 0°/360°-Übergang – geglättet
+// (Tiefpass) und als "unwrapped" Winkel gedreht, damit die Rose immer den
+// kürzesten Weg nimmt statt über die Naht zu hüpfen.
+let smoothedHeading = null;
+let displayRotation = 0;
 function onOrient(ev){
   let h = null;
   if (typeof ev.webkitCompassHeading === "number") h = ev.webkitCompassHeading;       // iOS
   else if (ev.absolute && typeof ev.alpha === "number") h = (360 - ev.alpha) % 360;   // Android
   if (h === null) return;
-  state.heading = h;
-  $("rose").style.transform = `rotate(${-h}deg)`;
-  $("headTxt").textContent = `${Math.round(h)}° ${dirName(h)}`;
+
+  if (smoothedHeading === null){
+    smoothedHeading = h;
+  } else {
+    const delta = ((h - smoothedHeading + 540) % 360) - 180;   // kürzester Winkel, -180..180
+    smoothedHeading = (smoothedHeading + delta * 0.15 + 360) % 360;
+  }
+  state.heading = smoothedHeading;
+
+  const diff = ((smoothedHeading - displayRotation % 360 + 540) % 360) - 180;
+  displayRotation += diff;
+
+  $("rose").style.transform = `rotate(${-displayRotation}deg)`;
+  $("headTxt").textContent = `${Math.round(smoothedHeading)}° ${dirName(smoothedHeading)}`;
 }
 function startCompass(){
   if (typeof DeviceOrientationEvent !== "undefined" &&
