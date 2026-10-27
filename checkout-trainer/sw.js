@@ -1,11 +1,11 @@
 // Checkout-Trainer – Service Worker (Scope: nur dieser Ordner).
 // Network-first: Online kommt immer die aktuelle Version, offline die zuletzt geladene.
 // So bleibt kein Update im Cache hängen. Bei sehr langsamem Netz greift ein Zeitlimit (siehe unten). Cache-Name trotzdem bei Änderungen an ASSETS hochzählen.
-const CACHE = "checkout-trainer-v1";
+const CACHE = "checkout-trainer-v2";
 const ASSETS = [
   "./", "./index.html", "./style.css", "./routes.js", "./logic.js", "./app.js", "./manifest.json",
   "./fonts/big-shoulders-display.woff2", "./fonts/hanken-grotesk.woff2",
-  "./icons/icon.svg", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable-512.png"
+  "./icons/favicon.svg", "./icons/favicon.ico", "./icons/icon.svg", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable-512.png"
 ];
 
 self.addEventListener("install", (e) => {

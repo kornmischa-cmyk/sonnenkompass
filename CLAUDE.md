@@ -71,3 +71,8 @@ falls daran gearbeitet wird:
 Eigenständige Darts-PWA mit eigenem Service Worker (Scope `./checkout-trainer/`) und eigener
 README. Die Single-File-Regel oben gilt für den Sonnenkompass, nicht für diesen Ordner.
 Der Root-`sw.js` ignoriert diesen Pfad und löscht nur Caches mit Präfix `sonnenkompass-`.
+Das Manifest des Sonnenkompass hat deshalb `"scope": "./index.html"`: Mit `"./"` wäre die
+installierte Sonnenkompass-App auch für `/checkout-trainer/` zuständig, und der Trainer würde
+sich in ihr öffnen statt als eigene App. Folge: Impressum und Datenschutz öffnen sich aus der
+installierten App mit Browserleiste. `id` im Manifest nicht ergänzen, das würde die
+installierte App zu einer neuen App machen.

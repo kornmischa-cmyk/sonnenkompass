@@ -3,7 +3,7 @@
   "short_name": "Sonnenkompass",
   "description": "Zeigt Sonnenauf- und -untergang als Kompass an – für Zeltausrichtung, Strandmuschel und Outdoor-Planung.",
   "start_url": "./index.html",
-  "scope": "./",
+  "scope": "./index.html",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#0B1220",
