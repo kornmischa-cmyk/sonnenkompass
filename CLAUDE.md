@@ -66,3 +66,8 @@ falls daran gearbeitet wird:
 - Kein Redesign der Kompassrose/Farbpalette ohne expliziten Wunsch – aktuelles
   Farbschema (dunkles Nachthimmel-Blau, Bernstein/Orange für Sonne) ist Ergebnis
   mehrerer Iterationsrunden.
+
+## Unterordner `checkout-trainer/`
+Eigenständige Darts-PWA mit eigenem Service Worker (Scope `./checkout-trainer/`) und eigener
+README. Die Single-File-Regel oben gilt für den Sonnenkompass, nicht für diesen Ordner.
+Der Root-`sw.js` ignoriert diesen Pfad und löscht nur Caches mit Präfix `sonnenkompass-`.

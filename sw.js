@@ -20,7 +20,9 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      // Nur eigene alte Caches löschen: Cache Storage gilt für die ganze Domain,
+      // andere Apps (z. B. ./checkout-trainer/) haben eigene Caches.
+      Promise.all(keys.filter((k) => k.startsWith("sonnenkompass-") && k !== CACHE_NAME).map((k) => caches.delete(k)))
     )
   );
   self.clients.claim();
@@ -30,6 +32,8 @@ self.addEventListener("activate", (event) => {
 // aktualisiert sich aber automatisch, wenn Netz verfügbar ist.
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+  // Unterordner-Apps mit eigenem Service Worker nicht mitcachen.
+  if (new URL(event.request.url).pathname.includes("/checkout-trainer/")) return;
   event.respondWith(
     caches.match(event.request).then((cached) => {
       const network = fetch(event.request)

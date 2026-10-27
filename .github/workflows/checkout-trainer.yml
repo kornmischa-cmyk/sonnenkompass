@@ -1,0 +1,27 @@
+name: Checkout-Trainer
+
+on:
+  push:
+    paths: ["checkout-trainer/**", ".github/workflows/checkout-trainer.yml"]
+  pull_request:
+    paths: ["checkout-trainer/**", ".github/workflows/checkout-trainer.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: checkout-trainer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Standardwege prüfen
+        run: node verify.js
+      - name: Logik testen
+        run: node test.js
+      - name: Offline-Dateiliste prüfen
+        run: node check-assets.js
+      - name: Syntax prüfen
+        run: for f in app.js logic.js routes.js sw.js; do node --check "$f"; done
