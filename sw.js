@@ -1,7 +1,7 @@
 // Sonnenkompass – Service Worker
 // Cache-Name bei jedem inhaltlichen Update hochzählen (v1 -> v2 ...),
 // sonst bekommen Nutzer alte Versionen aus dem Cache ausgeliefert.
-const CACHE_NAME = "sonnenkompass-v1";
+const CACHE_NAME = "sonnenkompass-v2";
 const ASSETS = [
   "./",
   "./index.html",
