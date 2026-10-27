@@ -57,5 +57,18 @@ for(const bad of [{t:1,score:1,richtig:true,tipp:false,darts:[]},{t:1,score:50,r
   {t:1,score:50,richtig:true,tipp:false,darts:['S0']},{t:1,score:50,richtig:'ja',tipp:false,darts:[]},{score:50}])
   assert(CO.parseBackup(JSON.stringify({app:'checkout-trainer',v:2,log:[bad]})).error,JSON.stringify(bad));
 for(const good of ['S1','S20','S25','D25','D1','T20']) assert(CO.validEntry({t:1,score:50,richtig:true,tipp:false,darts:[good]}),good);
+// Versionsfeld wird nicht als Text übernommen
+assert(!/</.test(CO.parseBackup(JSON.stringify({app:'checkout-trainer',v:'<b>x</b>',log:[]})).error));
+assert.equal(CO.esc('<img src=x onerror="a">&\''),'&lt;img src=x onerror=&quot;a&quot;&gt;&amp;&#39;');
+// Gespeicherten Stand lesen
+assert.deepEqual(CO.parseStored(null),{log:[],range:null,problem:null});
+assert.equal(CO.parseStored('{kaputt').problem,'unlesbar');
+assert.equal(CO.parseStored('{"v":2}').problem,'unlesbar');
+const st2=CO.parseStored(JSON.stringify({v:2,range:'41-60',log:[ent,{t:5,score:1}]}));
+assert.equal(st2.log.length,1);assert.equal(st2.problem,'1 Einträge unlesbar');assert.equal(st2.range,'41-60');
+assert.equal(CO.parseStored(JSON.stringify({v:2,range:1,log:[ent]})).problem,null);
+// Zwei Fenster: jedes kennt nur seine Einträge, Zusammenführen verliert nichts
+const tabA=[e(10,50,true,false),e(12,51,true,false)], tabB=[e(10,50,true,false),e(11,52,false,false)];
+assert.equal(CO.mergeLogs(tabA,tabB).length,3);
 console.log('Log-Tests ok');
 console.log('alle Tests bestanden');

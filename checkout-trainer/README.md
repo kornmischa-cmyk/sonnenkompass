@@ -13,15 +13,24 @@ Läuft unter `https://kornmischa-cmyk.github.io/sonnenkompass/checkout-trainer/`
 ```
 node verify.js   # Standardwege: Summe, Double am Ende, keine Duplikate, genau die 7 Bogey-Zahlen fehlen
 node test.js     # Bewertung, Boxen, Ziehung, Antwort-Log, Sicherung
+node check-assets.js  # Offline-Liste in sw.js vollständig und ohne tote Einträge
 ```
+Alle drei laufen automatisch bei jedem Push über `.github/workflows/checkout-trainer.yml`.
 
 ## Speichern
-- localStorage-Schlüssel `checkout-trainer-v2`: `{ v: 2, range, log }`.
+- localStorage-Schlüssel `checkout-trainer-v2`: `{ v: 2, range, log }`. `range` ist die feste Kennung
+  des Bereichs (z. B. `"41-60"`), nicht die Position in der Liste.
 - Gespeichert wird nur das Antwort-Log: `{ t, score, richtig, tipp, darts: ['T20','D20'], nc? }`.
   Boxen, „Heute x/y" (pro Kalendertag) und Serie (tagesübergreifend) werden daraus berechnet.
 - „Boxen zurücksetzen" schreibt einen Marker `{ t, reset: true }`. Das Log bleibt für spätere Auswertungen erhalten.
 - Sicherung: Übersicht → „Sichern (Datei)" / „Sicherung laden". Import führt zusammen, löscht nichts.
+- Mehrere Fenster: Vor jedem Speichern wird der gespeicherte Stand eingemischt, und andere Fenster
+  übernehmen Änderungen über das `storage`-Event. Dadurch geht keine Antwort verloren.
+- Ist der gespeicherte Stand unlesbar, legt die App den Rohtext unter `checkout-trainer-v2-defekt` ab
+  und bietet ihn als Datei an, statt ihn still zu überschreiben.
 
 ## Service Worker
-Network-first: online immer die aktuelle Version, offline die zuletzt geladene. Bei neuen Dateien die Liste
+Network-first: online immer die aktuelle Version, offline die zuletzt geladene. Antwortet das Netz
+nicht innerhalb von 3 s, kommt die Cache-Version, danach 10 s lang alles aus dem Cache, damit die
+Dateien zueinander passen. Bei neuen Dateien die Liste
 `ASSETS` und den Cache-Namen in `sw.js` anpassen.

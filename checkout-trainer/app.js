@@ -1,25 +1,57 @@
 (function () {
   var ROUTES = CO.parseRoutes(window.ROUTES_TXT);
-  var RANGES = [[2, 40, '2–40'], [41, 60, '41–60'], [61, 100, '61–100'], [101, 170, '101–170'], [2, 170, 'Alles']];
+  /* [von, bis, Beschriftung, feste Kennung]. Gespeichert wird die Kennung, damit neue Bereiche die Auswahl nicht verschieben. */
+  var RANGES = [[2, 40, '2–40', '2-40'], [41, 60, '41–60', '41-60'], [61, 100, '61–100', '61-100'], [101, 170, '101–170', '101-170'], [2, 170, 'Alles', 'alles']];
   /* Eigener Schlüssel, weil sich alle Apps unter kornmischa-cmyk.github.io denselben localStorage teilen. */
   var KEY = 'checkout-trainer-v2';
   var BOXCOL = ['var(--b0)', 'var(--b1)', 'var(--b2)', 'var(--b3)', 'var(--b4)', 'var(--b5)'];
   var st = { tab: 'train', range: 1, log: [], boxes: {}, cur: null, last: null, confirmReset: false, mult: 'S',
-    saveFailed: false, persisted: null, msg: null };
+    saveFailed: false, persisted: null, msg: null, damaged: null };
 
+  function rangeIndex(v) {
+    for (var i = 0; i < RANGES.length; i++) if (RANGES[i][3] === v) return i;
+    return typeof v === 'number' && RANGES[v] ? v : null; /* alte Speicherung als Position */
+  }
+  function readStored() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
   function load() {
-    try {
-      var o = JSON.parse(localStorage.getItem(KEY) || 'null');
-      if (o) {
-        if (Array.isArray(o.log)) st.log = o.log.filter(CO.validEntry);
-        if (typeof o.range === 'number' && RANGES[o.range]) st.range = o.range;
-      }
-    } catch (e) {}
+    var raw = readStored(), r = CO.parseStored(raw);
+    if (r.problem) {
+      /* Nicht kommentarlos überschreiben: Rohtext beiseitelegen und Hinweis zeigen. */
+      st.damaged = { raw: raw, problem: r.problem };
+      try { localStorage.setItem(KEY + '-defekt', raw); } catch (e) {}
+    }
+    st.log = r.log;
+    var ri = rangeIndex(r.range); if (ri !== null) st.range = ri;
     st.boxes = CO.deriveBoxes(st.log);
   }
+  /* Vor dem Schreiben den gespeicherten Stand einmischen: Ein zweites offenes Fenster
+     (z. B. installierte App und Browser-Tab) hat evtl. inzwischen eigene Antworten gespeichert. */
+  function syncFromStorage(raw) {
+    var r = CO.parseStored(raw);
+    if (r.problem || !r.log.length) return false;
+    var before = st.log.length;
+    st.log = CO.mergeLogs(st.log, r.log);
+    if (st.log.length === before) return false;
+    st.boxes = CO.deriveBoxes(st.log);
+    return true;
+  }
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify({ v: 2, range: st.range, log: st.log })); st.saveFailed = false; }
+    syncFromStorage(readStored());
+    try { localStorage.setItem(KEY, JSON.stringify({ v: 2, range: RANGES[st.range][3], log: st.log })); st.saveFailed = false; }
     catch (e) { st.saveFailed = true; }
+  }
+  /* Kurzmeldung für Screenreader in einer dauerhaft vorhandenen Live-Region. */
+  function announce(text) {
+    var live = $('live'); if (!live) return;
+    live.textContent = '';
+    setTimeout(function () { live.textContent = text; }, 50);
+  }
+  function download(text, name) {
+    var url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    var a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
   function addEntry(e) {
     /* Zeitstempel streng steigend halten, sonst kollidieren Einträge beim Zusammenführen. */
@@ -60,7 +92,7 @@
   function resultHtml() {
     var c = st.cur, r = c.res;
     var std = ROUTES[c.score];
-    var h = '<div class="result ' + (r.ok ? 'ok' : 'no') + '" role="status"><h2>' + r.title + '</h2>';
+    var h = '<div class="result ' + (r.ok ? 'ok' : 'no') + '"><h2>' + r.title + '</h2>';
     if (r.body) h += '<p>' + r.body + '</p>';
     if (std) h += '<div><div class="lbl">Standardweg</div><div class="route">' + CO.routeText(std) + '</div></div>';
     h += '<p class="small">' + r.boxNote + '</p>';
@@ -132,7 +164,7 @@
     h += '<div class="actions"><button class="btn" data-a="export"' + (st.log.length ? '' : ' disabled') + '>Sichern (Datei)</button>';
     h += '<button class="btn" data-a="import">Sicherung laden</button></div>';
     h += '<input type="file" id="importfile" accept="application/json,.json" hidden>';
-    h += '<p class="small" aria-live="polite">' + (st.msg ? st.msg : '') + '</p>';
+    h += '<p class="small">' + (st.msg ? CO.esc(st.msg) : '') + '</p>';
     h += '</section><div class="resetbox">';
     if (st.confirmReset) {
       h += '<span>Alle Boxen auf Neu setzen?</span><button class="btn danger" data-a="reset-yes">Ja, zurücksetzen</button><button class="btn ghost" data-a="reset-no">Abbrechen</button>';
@@ -140,16 +172,35 @@
     h += '</div><p class="note">Zurücksetzen stellt alle Zahlen auf Neu. Antworten, Tageszähler und Serie bleiben erhalten. Die Wege sind die gängigen Standardrouten.</p>';
     return h;
   }
+  /* Selektor, der denselben Button nach dem Neuaufbau wiederfindet. */
+  function focusKey(el) {
+    if (!el || !el.dataset || !el.dataset.a) return null;
+    var d = el.dataset, k = '[data-a="' + d.a + '"]';
+    ['n', 'm', 'i', 't'].forEach(function (x) { if (d[x] != null) k += '[data-' + x + '="' + d[x] + '"]'; });
+    return k;
+  }
+  function firstEnabled(sels) {
+    for (var i = 0; i < sels.length; i++) { var el = document.querySelector(sels[i] + ':not([disabled])'); if (el) return el; }
+    return null;
+  }
   function render() {
+    var app = $('app'), ae = document.activeElement;
+    var fk = ae && ae !== app && app.contains(ae) ? focusKey(ae) : null;
     var s = CO.stats(st.log, Date.now());
     var h = '<header><h1>Checkout<span>.</span>Trainer</h1><div class="session">Heute <b>' + s.ok + '/' + s.n + '</b> richtig · Serie <b>' + s.streak + '</b></div></header>';
     if (st.saveFailed) h += '<p class="warn" role="alert">Speichern hat nicht geklappt. Bitte unter Übersicht eine Sicherung als Datei anlegen.</p>';
+    if (st.damaged) h += '<div class="warn" role="alert"><p>Der gespeicherte Stand war beschädigt (' + CO.esc(st.damaged.problem) + '). Lesbare Antworten sind übernommen, eine Kopie des Originals liegt bereit.</p>' +
+      '<div class="actions"><button class="btn" data-a="raw">Original als Datei sichern</button><button class="btn ghost" data-a="raw-hide">Ausblenden</button></div></div>';
     h += '<div class="tabs" role="tablist"><button class="tab" role="tab" data-a="tab" data-t="train" aria-selected="' + (st.tab === 'train') + '">Training</button><button class="tab" role="tab" data-a="tab" data-t="over" aria-selected="' + (st.tab === 'over') + '">Übersicht</button></div>';
     h += st.tab === 'train' ? trainHtml() : overviewHtml();
     var det = document.querySelector('details.note'), open = det && det.open;
-    $('app').innerHTML = h;
+    app.innerHTML = h;
     if (open && (det = document.querySelector('details.note'))) det.open = true;
-    if (st.tab === 'train' && st.cur.res) { var nb = $('nextbtn'); if (nb) nb.focus({ preventScroll: true }); }
+    /* Fokus wiederherstellen, sonst springt er bei Tastaturbedienung nach jedem Druck an den Seitenanfang. */
+    var target = null;
+    if (st.tab === 'train' && st.cur.res) target = $('nextbtn');
+    else if (fk) target = firstEnabled([fk, '[data-a="check"]', '[data-a="num"]', '[data-a="tab"][aria-selected="true"]']);
+    if (target) target.focus({ preventScroll: true });
   }
   function finish(ok, title, body, nc) {
     var c = st.cur, old = st.boxes[c.score] || 0;
@@ -158,6 +209,7 @@
     var note = c.hint && ok ? 'Mit Tipp gelöst: Box bleibt bei ' + nb + '.' : (nb === old ? 'Box ' + nb + ' bleibt.' : (old ? 'Box ' + old : 'Neu') + ' → Box ' + nb + '.');
     c.res = { ok: ok, title: title, body: body, boxNote: note };
     st.last = c.score;
+    announce(title + '. ' + body);
   }
   function check() {
     var c = st.cur, e = CO.evaluate(c.score, c.darts), std = ROUTES[c.score];
@@ -178,13 +230,11 @@
     else finish(false, 'Nicht ganz', c.score + ' ist mit drei Darts checkbar.', true);
   }
   function exportLog() {
-    var data = JSON.stringify({ app: 'checkout-trainer', v: 2, exportedAt: new Date().toISOString(), range: st.range, log: st.log });
-    var url = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
-    var a = document.createElement('a');
-    a.href = url; a.download = 'checkout-trainer-' + CO.dayKey(Date.now()) + '.json';
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    syncFromStorage(readStored());
+    download(JSON.stringify({ app: 'checkout-trainer', v: 2, exportedAt: new Date().toISOString(), range: RANGES[st.range][3], log: st.log }),
+      'checkout-trainer-' + CO.dayKey(Date.now()) + '.json');
     st.msg = 'Sicherung erstellt. Die Datei liegt in deinen Downloads.';
+    announce(st.msg);
   }
   function importFile(file) {
     var r = new FileReader();
@@ -197,9 +247,9 @@
         var added = st.log.length - before;
         st.msg = added ? added + ' Einträge übernommen. Vorhandene Antworten bleiben erhalten.' : 'Nichts Neues: Alle Einträge waren schon vorhanden.';
       }
-      render();
+      announce(st.msg); render();
     };
-    r.onerror = function () { st.msg = 'Die Datei ließ sich nicht lesen.'; render(); };
+    r.onerror = function () { st.msg = 'Die Datei ließ sich nicht lesen.'; announce(st.msg); render(); };
     r.readAsText(file);
   }
   document.addEventListener('change', function (ev) {
@@ -211,6 +261,8 @@
     if (a !== 'export' && a !== 'import') st.msg = null;
     if (a === 'tab') { st.tab = b.dataset.t; st.confirmReset = false; }
     else if (a === 'range') { st.range = +b.dataset.i; save(); nextQuestion(); }
+    else if (a === 'raw') { download(st.damaged.raw, 'checkout-trainer-original-' + CO.dayKey(Date.now()) + '.json'); return; }
+    else if (a === 'raw-hide') st.damaged = null;
     else if (a === 'mult') st.mult = b.dataset.m;
     else if (a === 'num') {
       if (c.darts.length < 3 && !c.res) { c.darts.push({ m: st.mult, n: +b.dataset.n }); st.mult = 'S'; }
@@ -226,6 +278,10 @@
     else if (a === 'export') exportLog();
     else if (a === 'import') { $('importfile').click(); return; }
     render();
+  });
+  /* Anderes Fenster hat gespeichert: dessen Antworten übernehmen. */
+  window.addEventListener('storage', function (ev) {
+    if (ev.key === KEY && syncFromStorage(ev.newValue)) render();
   });
   /* Tageszähler springt um Mitternacht um, auch wenn die App offen bleibt. */
   document.addEventListener('visibilitychange', function () { if (!document.hidden) render(); });

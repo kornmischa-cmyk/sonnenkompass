@@ -104,3 +104,5 @@ details.note summary:focus-visible { outline: 2px solid var(--amber); outline-of
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 /* Schmale Handys: Bereichs-Chips in einer Zeile halten */
 @media (max-width: 380px) { .chips { gap: 4px; } .chip { padding: 6px 9px; } }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.warn p { margin: 0 0 8px; }

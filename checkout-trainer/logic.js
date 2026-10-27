@@ -106,15 +106,29 @@
     var o;
     try { o = JSON.parse(txt); } catch (e) { return { error: 'Die Datei ist kein gültiges JSON.' }; }
     if (!o || o.app !== 'checkout-trainer' || !Array.isArray(o.log)) return { error: 'Das ist keine Sicherung des Checkout-Trainers.' };
-    if (o.v !== 2) return { error: 'Unbekannte Version der Sicherung (' + o.v + ').' };
+    if (o.v !== 2) return { error: 'Unbekannte Version der Sicherung' + (typeof o.v === 'number' ? ' (' + o.v + ')' : '') + '.' };
     var bad = o.log.filter(function (e) { return !validEntry(e); }).length;
     if (bad) return { error: bad + ' Einträge in der Sicherung sind beschädigt. Nichts importiert.' };
     return { log: o.log };
+  }
+  /* Liest den gespeicherten Stand. problem ist gesetzt, wenn etwas nicht lesbar war –
+     dann darf der Rohtext nicht kommentarlos überschrieben werden. */
+  function parseStored(raw) {
+    if (raw == null) return { log: [], range: null, problem: null };
+    var o;
+    try { o = JSON.parse(raw); } catch (e) { return { log: [], range: null, problem: 'unlesbar' }; }
+    if (!o || typeof o !== 'object' || !Array.isArray(o.log)) return { log: [], range: null, problem: 'unlesbar' };
+    var log = o.log.filter(validEntry), dropped = o.log.length - log.length;
+    return { log: log, range: o.range == null ? null : o.range, problem: dropped ? dropped + ' Einträge unlesbar' : null };
+  }
+  /* Für Texte, die per innerHTML eingesetzt werden. */
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
   }
 
   var api = { dartValue: dartValue, label: label, parseRoutes: parseRoutes, routeText: routeText, sum: sum,
     isValidDart: isValidDart, evaluate: evaluate, pool: pool, pick: pick, nextBox: nextBox, WEIGHTS: WEIGHTS,
     dayKey: dayKey, makeEntry: makeEntry, deriveBoxes: deriveBoxes, stats: stats, validEntry: validEntry,
-    mergeLogs: mergeLogs, parseBackup: parseBackup };
+    mergeLogs: mergeLogs, parseBackup: parseBackup, parseStored: parseStored, esc: esc };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CO = api;
 })(typeof window !== 'undefined' ? window : globalThis);
