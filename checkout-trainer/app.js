@@ -1,16 +1,16 @@
 (function () {
   var ROUTES = CO.parseRoutes(window.ROUTES_TXT);
   /* [von, bis, Beschriftung, feste Kennung]. Gespeichert wird die Kennung, damit neue Bereiche die Auswahl nicht verschieben. */
-  var RANGES = [[2, 40, '2–40', '2-40'], [41, 60, '41–60', '41-60'], [61, 100, '61–100', '61-100'], [101, 170, '101–170', '101-170'], [2, 170, 'Alles', 'alles']];
+  var RANGES = [[2, 40, '2–40', '2-40'], [41, 80, '41–80', '41-80'], [81, 120, '81–120', '81-120'], [121, 170, '121–170', '121-170'], [2, 170, 'Alles', 'alles']];
   /* Eigener Schlüssel, weil sich alle Apps unter kornmischa-cmyk.github.io denselben localStorage teilen. */
   var KEY = 'checkout-trainer-v2';
   var BOXCOL = ['var(--b0)', 'var(--b1)', 'var(--b2)', 'var(--b3)', 'var(--b4)', 'var(--b5)'];
   var st = { tab: 'train', range: 1, log: [], boxes: {}, cur: null, last: null, confirmReset: false, mult: 'S',
-    saveFailed: false, persisted: null, msg: null, damaged: null };
+    saveFailed: false, persisted: null, msg: null, damaged: null, lastBackup: 0, snoozeUntil: 0 };
 
   function rangeIndex(v) {
     for (var i = 0; i < RANGES.length; i++) if (RANGES[i][3] === v) return i;
-    return typeof v === 'number' && RANGES[v] ? v : null; /* alte Speicherung als Position */
+    return null; /* unbekannt (z. B. früherer Bereich 41-60): Standard 41–80 */
   }
   function readStored() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
   function load() {
@@ -22,22 +22,25 @@
     }
     st.log = r.log;
     var ri = rangeIndex(r.range); if (ri !== null) st.range = ri;
+    st.lastBackup = r.lastBackup; st.snoozeUntil = r.snoozeUntil;
     st.boxes = CO.deriveBoxes(st.log);
   }
   /* Vor dem Schreiben den gespeicherten Stand einmischen: Ein zweites offenes Fenster
      (z. B. installierte App und Browser-Tab) hat evtl. inzwischen eigene Antworten gespeichert. */
   function syncFromStorage(raw) {
     var r = CO.parseStored(raw);
-    if (r.problem || !r.log.length) return false;
+    if (r.problem) return false;
+    var changed = false;
+    if (r.lastBackup > st.lastBackup) { st.lastBackup = r.lastBackup; changed = true; }
+    if (r.snoozeUntil > st.snoozeUntil) { st.snoozeUntil = r.snoozeUntil; changed = true; }
     var before = st.log.length;
-    st.log = CO.mergeLogs(st.log, r.log);
-    if (st.log.length === before) return false;
-    st.boxes = CO.deriveBoxes(st.log);
-    return true;
+    if (r.log.length) st.log = CO.mergeLogs(st.log, r.log);
+    if (st.log.length !== before) { st.boxes = CO.deriveBoxes(st.log); changed = true; }
+    return changed;
   }
   function save() {
     syncFromStorage(readStored());
-    try { localStorage.setItem(KEY, JSON.stringify({ v: 2, range: RANGES[st.range][3], log: st.log })); st.saveFailed = false; }
+    try { localStorage.setItem(KEY, JSON.stringify({ v: 2, range: RANGES[st.range][3], lastBackup: st.lastBackup, snoozeUntil: st.snoozeUntil, log: st.log })); st.saveFailed = false; }
     catch (e) { st.saveFailed = true; }
   }
   /* Kurzmeldung für Screenreader in einer dauerhaft vorhandenen Live-Region. */
@@ -126,9 +129,19 @@
     h += '<button class="btn primary" data-a="check"' + (!c.darts.length ? ' disabled' : '') + '>Prüfen</button></div>';
     return h;
   }
+  function daysText(d) { return d === 0 ? 'heute' : d === 1 ? 'gestern' : 'vor ' + d + ' Tagen'; }
+  /* Erinnerung an die Datei-Sicherung, einzeilig, damit das Training möglichst nicht scrollt. */
+  function nudgeHtml() {
+    if (st.msg) return '<p class="nudge done">' + CO.esc(st.msg) + '</p>';
+    var b = CO.backupStatus(st.log, st.lastBackup, st.snoozeUntil, Date.now());
+    if (!b.due) return '';
+    var txt = b.days === null ? 'Noch nie gesichert' : 'Letzte Sicherung ' + daysText(b.days);
+    return '<div class="nudge" role="note"><span>' + txt + '<span class="sr-only"> (' + b.fresh + ' neue Antworten)</span></span>' +
+      '<button class="btn primary" data-a="export" aria-label="Jetzt als Datei sichern">Sichern</button><button class="btn ghost" data-a="snooze" aria-label="Bis morgen ausblenden">Später</button></div>';
+  }
   function trainHtml() {
     var c = st.cur;
-    var h = chipsHtml();
+    var h = nudgeHtml() + chipsHtml();
     h += '<section class="board" aria-label="Aufgabe"><div class="score-row"><div><div class="lbl">Rest</div><div class="score">' + c.score + '</div></div>';
     h += '<div class="box-badge">' + boxPill(c.score) + '<span class="small">bis zu 3 Darts, Ende auf Double</span></div></div>';
     h += '<div class="slots">' + slotsHtml() + '</div>';
@@ -143,6 +156,21 @@
     p.forEach(function (s) { c[st.boxes[s] || 0]++; });
     return { c: c, total: p.length, sits: c[4] + c[5] };
   }
+  function problemsHtml(p) {
+    var r = CO.problemNumbers(st.log, p, Date.now(), 30, 5), h = '<section class="problems" aria-labelledby="pr-h"><h2 id="pr-h">Problemzahlen <span class="small">letzte 30 Tage</span></h2>';
+    if (!r.total) h += '<p class="small">Noch keine Antworten in diesem Bereich.</p>';
+    else if (!r.list.length) h += '<p class="small">Keine Fehler bei ' + r.total + ' Antworten. Stark.</p>';
+    else {
+      h += '<ol class="plist">';
+      r.list.forEach(function (a) {
+        h += '<li><span class="pn">' + a.score + '</span><span class="pr">' + (isBogey(a.score) ? 'nicht checkbar' : CO.routeText(ROUTES[a.score])) + '</span>' +
+          '<span class="pq">' + a.wrong + ' von ' + a.n + ' falsch</span></li>';
+      });
+      h += '</ol>';
+      if (r.total < 50) h += '<p class="small">Erst ' + r.total + ' Antworten, die Liste wird mit mehr Training aussagekräftiger.</p>';
+    }
+    return h + '</section>';
+  }
   function overviewHtml() {
     var p = poolNow(), k = counts(), h = '';
     h += chipsHtml();
@@ -151,7 +179,9 @@
     h += '</div><div class="legend">';
     h += '<span><i class="dot"></i>Neu ' + k.c[0] + '</span>';
     for (b = 1; b <= 5; b++) h += '<span><i class="dot" style="background:' + BOXCOL[b] + '"></i>Box ' + b + ': ' + k.c[b] + '</span>';
-    h += '</div></div><div class="grid">';
+    h += '</div></div>';
+    h += problemsHtml(p);
+    h += '<div class="grid">';
     p.slice().reverse().forEach(function (s) {
       var b = st.boxes[s] || 0, bog = isBogey(s);
       h += '<div class="cell' + (bog ? ' bogey' : '') + '" style="--c:' + BOXCOL[b] + '"><span class="cn">' + s + '</span><span class="cr">' + (bog ? 'nicht checkbar' : CO.routeText(ROUTES[s])) + '</span>' + (b ? '<span class="cb">' + b + '</span>' : '') + '</div>';
@@ -161,6 +191,7 @@
     h += '<p class="small">Dein Fortschritt liegt in diesem Browser auf diesem Gerät (' + st.log.filter(function (e) { return !e.reset; }).length + ' Antworten). ';
     h += st.persisted === true ? 'Der Browser hat dauerhaftes Speichern zugesagt.' : 'Der Browser kann ihn bei Speichermangel oder beim Löschen der Website-Daten entfernen.';
     h += ' Eine Datei-Sicherung schützt davor und hilft beim Gerätewechsel.</p>';
+    h += '<p class="small">Letzte Sicherung: <b>' + (st.lastBackup ? daysText(Math.floor((Date.now() - st.lastBackup) / 864e5)) : 'noch nie') + '</b></p>';
     h += '<div class="actions"><button class="btn" data-a="export"' + (st.log.length ? '' : ' disabled') + '>Sichern (Datei)</button>';
     h += '<button class="btn" data-a="import">Sicherung laden</button></div>';
     h += '<input type="file" id="importfile" accept="application/json,.json" hidden>';
@@ -233,6 +264,7 @@
     syncFromStorage(readStored());
     download(JSON.stringify({ app: 'checkout-trainer', v: 2, exportedAt: new Date().toISOString(), range: RANGES[st.range][3], log: st.log }),
       'checkout-trainer-' + CO.dayKey(Date.now()) + '.json');
+    st.lastBackup = Date.now(); st.snoozeUntil = 0; save();
     st.msg = 'Sicherung erstellt. Die Datei liegt in deinen Downloads.';
     announce(st.msg);
   }
@@ -263,6 +295,7 @@
     else if (a === 'range') { st.range = +b.dataset.i; save(); nextQuestion(); }
     else if (a === 'raw') { download(st.damaged.raw, 'checkout-trainer-original-' + CO.dayKey(Date.now()) + '.json'); return; }
     else if (a === 'raw-hide') st.damaged = null;
+    else if (a === 'snooze') { st.snoozeUntil = CO.endOfDay(Date.now()); save(); }
     else if (a === 'mult') st.mult = b.dataset.m;
     else if (a === 'num') {
       if (c.darts.length < 3 && !c.res) { c.darts.push({ m: st.mult, n: +b.dataset.n }); st.mult = 'S'; }

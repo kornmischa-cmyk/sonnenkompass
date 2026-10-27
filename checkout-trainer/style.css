@@ -23,7 +23,7 @@ html, body { margin: 0; }
 body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.45; }
 button { font: inherit; color: inherit; cursor: pointer; }
 button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
-.wrap { max-width: 720px; margin: 0 auto; padding-block: max(12px, env(safe-area-inset-top, 0px)) 24px;
+.wrap { max-width: 720px; margin: 0 auto; padding-block: max(12px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-bottom, 0px));
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
   display: flex; flex-direction: column; gap: 12px; }
 header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -106,3 +106,18 @@ details.note summary:focus-visible { outline: 2px solid var(--amber); outline-of
 @media (max-width: 380px) { .chips { gap: 4px; } .chip { padding: 6px 9px; } }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .warn p { margin: 0 0 8px; }
+/* Erinnerung an die Sicherung: eine Zeile über den Bereichs-Chips */
+.nudge { display: flex; align-items: center; gap: 6px; margin: 0; padding: 2px 2px 2px 10px; border: 1px solid var(--line); border-left: 4px solid var(--amber); border-radius: 6px; background: var(--panel); font-size: 13px; }
+.nudge span { flex: 1; line-height: 1.25; }
+.nudge .btn { min-height: 32px; padding: 2px 10px; font-size: 13px; flex: 0 0 auto; }
+.nudge.done { padding: 10px; border-left-color: var(--good); }
+/* Problemzahlen */
+.problems { display: grid; gap: 6px; }
+.problems h2 { margin: 0; font-size: 16px; }
+.problems h2 .small { font-weight: 400; }
+.problems p { margin: 0; }
+.plist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.plist li { display: grid; grid-template-columns: 52px 1fr auto; align-items: baseline; gap: 10px; padding: 6px 10px; border: 1px solid var(--line); border-left: 4px solid var(--bad); border-radius: 6px; background: var(--panel); }
+.plist .pn { font-family: var(--display); font-weight: 800; font-size: 24px; line-height: 1; font-variant-numeric: tabular-nums; }
+.plist .pr { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.plist .pq { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }

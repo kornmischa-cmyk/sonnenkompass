@@ -61,7 +61,9 @@ for(const good of ['S1','S20','S25','D25','D1','T20']) assert(CO.validEntry({t:1
 assert(!/</.test(CO.parseBackup(JSON.stringify({app:'checkout-trainer',v:'<b>x</b>',log:[]})).error));
 assert.equal(CO.esc('<img src=x onerror="a">&\''),'&lt;img src=x onerror=&quot;a&quot;&gt;&amp;&#39;');
 // Gespeicherten Stand lesen
-assert.deepEqual(CO.parseStored(null),{log:[],range:null,problem:null});
+assert.deepEqual(CO.parseStored(null),{log:[],range:null,lastBackup:0,snoozeUntil:0,problem:null});
+assert.equal(CO.parseStored(JSON.stringify({v:2,log:[],lastBackup:123,snoozeUntil:'x'})).lastBackup,123);
+assert.equal(CO.parseStored(JSON.stringify({v:2,log:[],lastBackup:123,snoozeUntil:'x'})).snoozeUntil,0);
 assert.equal(CO.parseStored('{kaputt').problem,'unlesbar');
 assert.equal(CO.parseStored('{"v":2}').problem,'unlesbar');
 const st2=CO.parseStored(JSON.stringify({v:2,range:'41-60',log:[ent,{t:5,score:1}]}));
@@ -71,4 +73,35 @@ assert.equal(CO.parseStored(JSON.stringify({v:2,range:1,log:[ent]})).problem,nul
 const tabA=[e(10,50,true,false),e(12,51,true,false)], tabB=[e(10,50,true,false),e(11,52,false,false)];
 assert.equal(CO.mergeLogs(tabA,tabB).length,3);
 console.log('Log-Tests ok');
+
+// ---------- Erinnerung an die Sicherung ----------
+const DAY=864e5, now=new Date(2026,9,27,20,0).getTime();
+const many=(n,start,step)=>Array.from({length:n},(_,i)=>e(start+i*step,50,true,false));
+let bs=CO.backupStatus(many(49,now-DAY,1000),0,0,now);
+assert.deepEqual(bs,{due:false,days:null,fresh:49});                        // nie gesichert, aber zu wenig Antworten
+assert.equal(CO.backupStatus(many(50,now-DAY,1000),0,0,now).due,true);       // nie gesichert, 50 Antworten
+const last=now-14*DAY;
+assert.equal(CO.backupStatus(many(60,last+1000,1000),last,0,now).due,true);  // 14 Tage, 60 neue
+assert.equal(CO.backupStatus(many(60,last+1000,1000),last+DAY,0,now).due,false); // erst 13 Tage
+assert.equal(CO.backupStatus(many(60,last-100000,1000).concat(many(10,last+1000,1000)),last,0,now).fresh,10); // nur neue zählen
+assert.equal(CO.backupStatus(many(60,last+1000,1000).concat([{t:now-5,reset:true}]),last,0,now).fresh,60); // Reset-Marker zählt nicht
+assert.equal(CO.backupStatus(many(60,last+1000,1000),last,now+1,now).due,false); // "Später" aktiv
+assert.equal(CO.backupStatus(many(60,last+1000,1000),last,0,now).days,14);
+// "Später" gilt bis Mitternacht
+assert.equal(CO.endOfDay(now),new Date(2026,9,28,0,0).getTime());
+
+// ---------- Problemzahlen ----------
+const pe=(t,score,ok)=>CO.makeEntry(t,score,ok,false,[]);
+const plog=[pe(now-40*DAY,61,false),                                   // zu alt
+  pe(now-5,61,true),pe(now-4,61,false),                                 // 61: 1/2 falsch
+  pe(now-3,70,false),pe(now-2,70,false),pe(now-1,70,true),              // 70: 2/3 falsch
+  pe(now-6,72,false),pe(now-7,72,false),                                // 72: 2/2 falsch
+  pe(now-8,64,true),                                                    // 64: nie falsch
+  pe(now-9,90,false),{t:now-10,reset:true}];                            // 90: außerhalb des Bereichs
+const pn=CO.problemNumbers(plog,CO.pool(R,41,80),now);
+assert.equal(pn.total,8);
+assert.deepEqual(pn.list.map(a=>[a.score,a.wrong,a.n]),[[72,2,2],[70,2,3],[61,1,2]]);
+assert.equal(CO.problemNumbers(plog,CO.pool(R,41,80),now,30,1).list.length,1);
+assert.deepEqual(CO.problemNumbers([],CO.pool(R,41,80),now),{total:0,list:[]});
+console.log('Erinnerung und Problemzahlen ok');
 console.log('alle Tests bestanden');

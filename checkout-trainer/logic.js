@@ -114,12 +114,47 @@
   /* Liest den gespeicherten Stand. problem ist gesetzt, wenn etwas nicht lesbar war –
      dann darf der Rohtext nicht kommentarlos überschrieben werden. */
   function parseStored(raw) {
-    if (raw == null) return { log: [], range: null, problem: null };
+    var empty = { log: [], range: null, lastBackup: 0, snoozeUntil: 0, problem: null };
+    if (raw == null) return empty;
     var o;
-    try { o = JSON.parse(raw); } catch (e) { return { log: [], range: null, problem: 'unlesbar' }; }
-    if (!o || typeof o !== 'object' || !Array.isArray(o.log)) return { log: [], range: null, problem: 'unlesbar' };
+    try { o = JSON.parse(raw); } catch (e) { empty.problem = 'unlesbar'; return empty; }
+    if (!o || typeof o !== 'object' || !Array.isArray(o.log)) { empty.problem = 'unlesbar'; return empty; }
     var log = o.log.filter(validEntry), dropped = o.log.length - log.length;
-    return { log: log, range: o.range == null ? null : o.range, problem: dropped ? dropped + ' Einträge unlesbar' : null };
+    var num = function (x) { return typeof x === 'number' && isFinite(x) ? x : 0; };
+    return { log: log, range: o.range == null ? null : o.range, lastBackup: num(o.lastBackup), snoozeUntil: num(o.snoozeUntil),
+      problem: dropped ? dropped + ' Einträge unlesbar' : null };
+  }
+
+  /* ---------- Erinnerung an die Datei-Sicherung ----------
+     Fällig, wenn seit der letzten Sicherung BACKUP_DAYS Tage vergangen sind (oder nie gesichert wurde)
+     UND seitdem mindestens BACKUP_MIN neue Antworten dazukamen. So nervt sie nicht nach einer Trainingspause. */
+  var BACKUP_DAYS = 14, BACKUP_MIN = 50, DAY = 864e5;
+  function backupStatus(log, lastBackup, snoozeUntil, now) {
+    var fresh = 0;
+    for (var i = log.length - 1; i >= 0 && log[i].t > lastBackup; i--) if (!log[i].reset) fresh++;
+    var days = lastBackup ? Math.floor((now - lastBackup) / DAY) : null;
+    var due = fresh >= BACKUP_MIN && (days === null || days >= BACKUP_DAYS) && now >= snoozeUntil;
+    return { due: due, days: days, fresh: fresh };
+  }
+  /* Ende des lokalen Kalendertags von t: "Später" blendet die Erinnerung bis morgen aus. */
+  function endOfDay(t) { var d = new Date(t); d.setHours(24, 0, 0, 0); return d.getTime(); }
+
+  /* ---------- Problemzahlen ----------
+     Zahlen aus der Liste scores mit den meisten Fehlern im Zeitraum (Standard 30 Tage).
+     Sortierung: Fehler absteigend, dann Fehlerquote, dann Zahl absteigend. */
+  function problemNumbers(log, scores, now, days, limit) {
+    days = days || 30; limit = limit || 5;
+    var from = now - days * DAY, inSet = {}, agg = {}, total = 0;
+    scores.forEach(function (s) { inSet[s] = 1; });
+    log.forEach(function (e) {
+      if (e.reset || e.t < from || !inSet[e.score]) return;
+      total++;
+      var a = agg[e.score] || (agg[e.score] = { score: e.score, n: 0, wrong: 0 });
+      a.n++; if (!e.richtig) a.wrong++;
+    });
+    var list = Object.keys(agg).map(function (k) { return agg[k]; }).filter(function (a) { return a.wrong > 0; });
+    list.sort(function (x, y) { return y.wrong - x.wrong || y.wrong / y.n - x.wrong / x.n || y.score - x.score; });
+    return { total: total, list: list.slice(0, limit) };
   }
   /* Für Texte, die per innerHTML eingesetzt werden. */
   function esc(s) {
@@ -129,6 +164,7 @@
   var api = { dartValue: dartValue, label: label, parseRoutes: parseRoutes, routeText: routeText, sum: sum,
     isValidDart: isValidDart, evaluate: evaluate, pool: pool, pick: pick, nextBox: nextBox, WEIGHTS: WEIGHTS,
     dayKey: dayKey, makeEntry: makeEntry, deriveBoxes: deriveBoxes, stats: stats, validEntry: validEntry,
-    mergeLogs: mergeLogs, parseBackup: parseBackup, parseStored: parseStored, esc: esc };
+    mergeLogs: mergeLogs, parseBackup: parseBackup, parseStored: parseStored, esc: esc,
+    backupStatus: backupStatus, endOfDay: endOfDay, problemNumbers: problemNumbers, BACKUP_DAYS: BACKUP_DAYS, BACKUP_MIN: BACKUP_MIN };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.CO = api;
 })(typeof window !== 'undefined' ? window : globalThis);
