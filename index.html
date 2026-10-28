@@ -216,7 +216,7 @@
     <input id="lonIn" type="number" step="0.0001" inputmode="decimal" placeholder="Länge, z. B. 8.68" aria-label="Längengrad">
     <button id="applyBtn" style="flex:100%">Übernehmen</button>
   </div>
-  <p class="hint" id="hint">Die Rose dreht sich mit deinem Handy-Kompass, sobald du ihn aktivierst. Ohne Kompass gilt: Norden ist oben.</p>
+  <p class="hint" id="hint" role="status" aria-live="polite">Die Rose dreht sich mit deinem Handy-Kompass, sobald du ihn aktivierst. Ohne Kompass gilt: Norden ist oben.</p>
 </div>
 
 <footer class="legal">
@@ -574,6 +574,21 @@ function startCompass(){
     window.addEventListener("deviceorientationabsolute", onOrient);
     window.addEventListener("deviceorientation", onOrient);
     $("compassBtn").hidden = true;
+
+    // Android startet ohne Berechtigungsdialog – kommt kein einziges Sensor-Event
+    // an (Berechtigung verweigert, kein Sensor, Browser-Eigenheit), bliebe das
+    // sonst lautlos ohne jede Rückmeldung. Nach kurzer Frist sichtbar machen
+    // und einen erneuten Versuch anbieten.
+    const noSignalTimer = setTimeout(() => {
+      if (smoothedHeading === null){
+        $("compassBtn").hidden = false;
+        $("compassBtn").textContent = "Kompass erneut aktivieren";
+        $("hint").textContent = "Kein Kompasssignal erkannt – Gerät kurz bewegen oder die Sensor-Berechtigung in den Website-Einstellungen des Browsers prüfen, dann erneut versuchen.";
+      }
+    }, 2500);
+    const onFirstSignal = () => clearTimeout(noSignalTimer);
+    window.addEventListener("deviceorientationabsolute", onFirstSignal, { once: true });
+    window.addEventListener("deviceorientation", onFirstSignal, { once: true });
   }
 }
 
